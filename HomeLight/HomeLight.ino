@@ -9,9 +9,14 @@
 void Blink(int t1, int t2);
 void ShowError(int t1, int t2);
 void SetColor(uint32_t color);
+
+void StartWiFiAccessPoint();
+void ConnectWiFi(String ssid, String Password);
+
+void HandleGetWiFi();
+void HandlePostWiFi();
 void HandleRoot();
-void HandleColor();
-void StartWebServer();
+void HandlePostColor();
 String GetWiFiConfigurationPage();
 
 bool ReadWiFiConfiguration(String& ssid, String& password);
@@ -34,16 +39,30 @@ void setup()
 {
     pinMode(LedPin, OUTPUT);
 
-    //StartWebServer();
+    Blink(500, 100);
+    Blink(500, 100);
 
-    //Strip.begin();
-    //Strip.show();
+    String ssid;
+    String password;
+    if (ReadWiFiConfiguration(ssid, password))
+    {
+        digitalWrite(LedPin, HIGH); // off
+        Strip.begin();
+        Strip.show();
+        ConnectWiFi(ssid, password);
+    }
+    else
+    {
+        digitalWrite(LedPin, LOW); // on
+        StartWiFiAccessPoint();
+    }
 }
 
 void loop()
 {
     //WebServer.handleClient();
 }
+
 
 void Blink(int t1, int t2)
 {
@@ -71,12 +90,51 @@ void SetColor(uint32_t color)
     Strip.show();
 }
 
-void HandleRoot()
+
+void StartWiFiAccessPoint()
 {
-    WebServer.send(200, "text/html", "<h1>HomeLight - connected</h1>");
+    WiFi.softAP(WiFiSSid, WiFiPassword);
+
+    WebServer.on("/", HandleGetWiFi);
+    WebServer.on("/", HTTPMethod::HTTP_POST, HandlePostWiFi);
+    WebServer.begin();
 }
 
-void HandleColor()
+void ConnectWiFi(String ssid, String password)
+{
+    WiFi.begin(ssid.c_str(), password.c_str());
+    while (WiFi.status() != WL_CONNECTED)
+    {
+        Blink(200, 200);
+        delay(10);
+    }
+
+    WebServer.on("/", HandleRoot);
+    WebServer.on("/color", HTTPMethod::HTTP_POST, HandlePostColor);
+    WebServer.begin();
+}
+
+
+void HandleGetWiFi()
+{
+    String page = GetWiFiConfigurationPage();
+    WebServer.send(200, "text/html", page);
+}
+
+void HandlePostWiFi()
+{
+    // TODO
+    
+    //WebServer.send(200, "text/plain", "OK");
+    //ESP.restart();
+}
+
+void HandleRoot()
+{
+    WebServer.send(200, "text/plain", "OK");
+}
+
+void HandlePostColor()
 {
     String rStr = WebServer.arg("r");
     String gStr = WebServer.arg("g");
@@ -86,33 +144,9 @@ void HandleColor()
     byte g = atoi(gStr.c_str());
     byte b = atoi(bStr.c_str());
 
-    /* String response = "r = ";
-     response += rStr;
-     response += " | ";
-     response += String(r);
-
-     response += "\ng = ";
-     response += gStr;
-     response += " | ";
-     response += String(g);
-
-     response += "\nb = ";
-     response += bStr;
-     response += " | ";
-     response += String(b);*/
-
     SetColor(Strip.Color(r, g, b));
 
-    //WebServer.send(200, "text/plain", response);
-}
-
-void StartWebServer()
-{
-    WiFi.softAP(WiFiSSid, WiFiPassword);
-
-    WebServer.on("/", HandleRoot);
-    WebServer.on("/color", HTTPMethod::HTTP_POST, HandleColor);
-    WebServer.begin();
+    WebServer.send(200);
 }
 
 String GetWiFiConfigurationPage()
@@ -132,6 +166,7 @@ String GetWiFiConfigurationPage()
 
     return file.readString();
 }
+
 
 bool ReadWiFiConfiguration(String& ssid, String& password)
 {
@@ -171,6 +206,7 @@ void WriteWiFiConfiguration(const String& ssid, const String& password)
 
     EEPROM.end();
 }
+
 
 void ReadEEPROM(byte* buffer, unsigned int start, unsigned int count)
 {
